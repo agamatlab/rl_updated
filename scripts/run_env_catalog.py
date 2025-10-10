@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """
-Utility to launch training runs across the full MiniGrid and BabyAI catalog.
+Catalog runner to train MiniGrid and BabyAI environments in bulk.
 
-The script groups environments that share similar hyper-parameter needs, builds
-the appropriate command line for ``python3 -m scripts.train`` and executes each
-run sequentially.  It is meant for large-scale sweeps on GPU-equipped machines.
-
-Example:
-    python3 scripts/run_env_catalog.py --category babyai_goto mini_basic --dry-run
+This variant guarantees every run trains for at least 2 million frames and, by
+default, loops forever generating fresh model names each pass so long-running
+machines stay busy. Use ``--one-pass`` if you want the legacy single sweep.
 """
 
 from __future__ import annotations
@@ -17,10 +14,13 @@ import os
 import shlex
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Iterable, List, Tuple
+
+MIN_FRAMES = 2_000_000
 
 
 @dataclass(frozen=True)
@@ -60,11 +60,11 @@ MINIGRID_BASIC = GroupConfig(
         "MiniGrid-DistShift1-v0",
         "MiniGrid-DistShift2-v0",
     ),
-    frames=500_000,
+    frames=MIN_FRAMES,
     procs=16,
 )
 
-MINIGRID_DOORKEY = GroupConfig(
+MINIGRID_DOOR = GroupConfig(
     envs=(
         "MiniGrid-DoorKey-5x5-v0",
         "MiniGrid-DoorKey-6x6-v0",
@@ -83,7 +83,7 @@ MINIGRID_DOORKEY = GroupConfig(
         "MiniGrid-BlockedUnlockPickup-v0",
         "MiniGrid-UnlockPickup-v0",
     ),
-    frames=750_000,
+    frames=MIN_FRAMES,
     procs=16,
     recurrence=8,
 )
@@ -108,7 +108,7 @@ MINIGRID_HAZARDS = GroupConfig(
         "MiniGrid-Dynamic-Obstacles-8x8-v0",
         "MiniGrid-Dynamic-Obstacles-16x16-v0",
     ),
-    frames=1_000_000,
+    frames=MIN_FRAMES,
     procs=24,
     recurrence=16,
 )
@@ -129,7 +129,7 @@ MINIGRID_OBSTRUCTED = GroupConfig(
         "MiniGrid-ObstructedMaze-2Q-v1",
         "MiniGrid-ObstructedMaze-Full-v1",
     ),
-    frames=1_500_000,
+    frames=MIN_FRAMES,
     procs=24,
     recurrence=32,
 )
@@ -159,7 +159,7 @@ MINIGRID_WFC = GroupConfig(
         "MiniGrid-WFC-ObstaclesHogs2-v0",
         "MiniGrid-WFC-Skew2-v0",
     ),
-    frames=1_000_000,
+    frames=MIN_FRAMES,
     procs=16,
     recurrence=16,
 )
@@ -201,7 +201,7 @@ BABYAI_GOTO = GroupConfig(
         "BabyAI-GoToDoor-v0",
         "BabyAI-GoToObjDoor-v0",
     ),
-    frames=2_000_000,
+    frames=2_500_000,
     procs=16,
     recurrence=32,
     text=True,
@@ -342,7 +342,7 @@ BABYAI_COMPOSITE = GroupConfig(
 
 GROUPS: dict[str, GroupConfig] = {
     "mini_basic": MINIGRID_BASIC,
-    "mini_door": MINIGRID_DOORKEY,
+    "mini_door": MINIGRID_DOOR,
     "mini_hazards": MINIGRID_HAZARDS,
     "mini_obstructed": MINIGRID_OBSTRUCTED,
     "mini_wfc": MINIGRID_WFC,
@@ -355,13 +355,19 @@ GROUPS: dict[str, GroupConfig] = {
 }
 
 
-def sanitize_model_name(env_id: str, prefix: str) -> str:
-    return f"{prefix}{env_id.replace('-', '_').lower()}"
+def sanitize_model_name(env_id: str, prefix: str, iteration: int, job_idx: int) -> str:
+    safe_env = env_id.replace("-", "_").lower()
+    return f"{prefix}{safe_env}_iter{iteration:05d}_job{job_idx:03d}"
 
 
-def command_for(env_id: str, group: GroupConfig, args: argparse.Namespace) -> list[str]:
-    model_name = sanitize_model_name(env_id, args.model_prefix)
-    frames = args.frames if args.frames else group.frames
+def command_for(
+    env_id: str,
+    group: GroupConfig,
+    args: argparse.Namespace,
+    model_name: str,
+    seed: int,
+    frames: int,
+) -> list[str]:
     procs = args.procs if args.procs else group.procs
     cmd = [
         sys.executable,
@@ -376,7 +382,7 @@ def command_for(env_id: str, group: GroupConfig, args: argparse.Namespace) -> li
         "--frames",
         str(frames),
         "--seed",
-        str(args.seed),
+        str(seed),
         "--procs",
         str(procs),
         "--save-interval",
@@ -384,10 +390,12 @@ def command_for(env_id: str, group: GroupConfig, args: argparse.Namespace) -> li
         "--log-interval",
         str(args.log_interval),
     ]
-    if group.frames_per_proc:
-        cmd += ["--frames-per-proc", str(group.frames_per_proc)]
-    if group.recurrence > 1:
-        cmd += ["--recurrence", str(group.recurrence)]
+    frames_per_proc = args.frames_per_proc or group.frames_per_proc
+    if frames_per_proc:
+        cmd += ["--frames-per-proc", str(frames_per_proc)]
+    recurrence = args.recurrence if args.recurrence else group.recurrence
+    if recurrence > 1:
+        cmd += ["--recurrence", str(recurrence)]
     if group.text:
         cmd.append("--text")
     if group.extra_args:
@@ -400,8 +408,8 @@ def command_for(env_id: str, group: GroupConfig, args: argparse.Namespace) -> li
 def iter_envs(selected: Iterable[str]) -> Iterable[tuple[str, GroupConfig]]:
     for name in selected:
         group = GROUPS[name]
-        for env_id in group.envs:
-            yield env_id, group
+        for env in group.envs:
+            yield env, group
 
 
 def parse_args() -> argparse.Namespace:
@@ -410,129 +418,189 @@ def parse_args() -> argparse.Namespace:
         "--category",
         action="append",
         choices=GROUPS.keys(),
-        help="Run only the specified category (can be passed multiple times).",
+        help="Run only specific categories (repeat flag to select multiple).",
     )
-    parser.add_argument("--seed", type=int, default=1, help="Seed forwarded to training.")
+    parser.add_argument("--seed", type=int, default=1, help="Base RNG seed.")
     parser.add_argument(
         "--frames",
         type=int,
-        help="Override the frame budget for every run (default: per-group value).",
+        help=f"Override frame budget for all runs (minimum enforced: {MIN_FRAMES}).",
     )
     parser.add_argument(
         "--procs",
         type=int,
-        help="Override the number of processes (default: per-group value).",
+        help="Override number of environment workers per run.",
+    )
+    parser.add_argument(
+        "--frames-per-proc",
+        type=int,
+        help="Override frames-per-proc forwarded to algorithms.",
+    )
+    parser.add_argument(
+        "--recurrence",
+        type=int,
+        help="Override recurrence forwarded to algorithms.",
     )
     parser.add_argument(
         "--algo",
         default="ppo",
-        help="Algorithm to pass to training (default: ppo).",
+        help="Algorithm flag passed to scripts.train (default: ppo).",
     )
     parser.add_argument(
         "--model-prefix",
         default="catalog_",
-        help="Prefix added to every generated model name (default: catalog_).",
+        help="Prefix for generated model directory names.",
     )
     parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Skip runs whose storage directory already contains status.pt.",
+        help="Skip jobs whose model directory already contains status.pt.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print commands without executing them.",
+        help="Print commands but do not execute anything.",
     )
     parser.add_argument(
         "--extra",
         nargs=argparse.REMAINDER,
         default=(),
-        help="Additional arguments appended to every command (place after --).",
+        help="Extra command-line args appended to every scripts.train call (prefix with --).",
     )
     parser.add_argument(
         "--save-interval",
         type=int,
         default=50,
-        help="Overrides --save-interval for every run (default: 50).",
+        help="Save interval forwarded to training script.",
     )
     parser.add_argument(
         "--log-interval",
         type=int,
         default=1,
-        help="Overrides --log-interval for every run (default: 1).",
+        help="Log interval forwarded to training script.",
     )
     parser.add_argument(
         "--ignore-failures",
         action="store_true",
-        help="Continue after a failed training run instead of stopping.",
+        help="Continue queue even if a run fails.",
     )
     parser.add_argument(
         "--max-parallel",
         type=int,
         default=1,
-        help="Maximum number of concurrent training processes (default: 1).",
+        help="Number of concurrent training processes to launch.",
     )
+    parser.add_argument(
+        "--loop-sleep",
+        type=int,
+        default=10,
+        help="Seconds to sleep between iterations when looping forever.",
+    )
+    parser.add_argument(
+        "--one-pass",
+        dest="loop",
+        action="store_false",
+        help="Process the catalog once and exit (default loops forever).",
+    )
+    parser.set_defaults(loop=True)
     return parser.parse_args()
 
 
+def storage_dir() -> Path:
+    return Path(os.environ.get("RL_STORAGE") or os.environ.get("PROJECT_STORAGE") or "storage")
+
+
 def has_status(model_name: str) -> bool:
-    storage_root = Path(
-        os.environ.get("RL_STORAGE")
-        or os.environ.get("PROJECT_STORAGE")
-        or "storage"
-    )
-    return (storage_root / model_name / "status.pt").exists()
+    return (storage_dir() / model_name / "status.pt").exists()
 
 
-def main(args: argparse.Namespace) -> None:
-    selected = args.category if args.category else GROUPS.keys()
-    jobs: list[tuple[str, GroupConfig, list[str]]] = []
-    for env_id, group in iter_envs(selected):
-        model_name = sanitize_model_name(env_id, args.model_prefix)
+def build_jobs(
+    args: argparse.Namespace,
+    selected: Iterable[str],
+    iteration: int,
+) -> list[tuple[str, str, list[str]]]:
+    jobs: list[tuple[str, str, list[str]]] = []
+    base_seed = args.seed + (iteration - 1) * 1000
+
+    for job_idx, (env_id, group) in enumerate(iter_envs(selected), start=1):
+        model_name = sanitize_model_name(env_id, args.model_prefix, iteration, job_idx)
         if args.skip_existing and has_status(model_name):
-            print(f"[skip] {env_id} (existing status)")
+            print(f"[skip] iter {iteration} {env_id} ({model_name}) - existing status")
             continue
-        cmd = command_for(env_id, group, args)
-        print(f"[run] {env_id}\n       {shlex.join(cmd)}")
-        jobs.append((env_id, group, cmd))
 
+        frames = max(args.frames or group.frames, MIN_FRAMES)
+        seed = base_seed + job_idx
+        cmd = command_for(env_id, group, args, model_name, seed, frames)
+        print(f"[run]  iter {iteration} {env_id}\n       {shlex.join(cmd)}")
+        jobs.append((env_id, model_name, cmd))
+
+    return jobs
+
+
+def run_job(env_id: str, model_name: str, cmd: list[str], iteration: int) -> None:
+    print(f"[start] iter {iteration} {env_id} -> {model_name}")
+    subprocess.run(cmd, check=True)
+    print(f"[done]  iter {iteration} {env_id}")
+
+
+def execute_jobs(args: argparse.Namespace, jobs: list[tuple[str, str, list[str]]], iteration: int) -> int:
     if args.dry_run or not jobs:
-        return
+        return 0
 
     max_workers = max(1, args.max_parallel)
     exit_code = 0
 
-    def run_job(env_id: str, command: list[str]) -> None:
-        print(f"[start] {env_id}")
-        subprocess.run(command, check=True)
-        print(f"[done] {env_id}")
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {
-            executor.submit(run_job, env_id, cmd): env_id for env_id, _, cmd in jobs
+            executor.submit(run_job, env_id, model_name, cmd, iteration): (env_id, model_name)
+            for env_id, model_name, cmd in jobs
         }
         for future in as_completed(future_map):
-            env_id = future_map[future]
+            env_id, model_name = future_map[future]
             try:
                 future.result()
             except subprocess.CalledProcessError as exc:
-                exit_code = exc.returncode
+                exit_code = exc.returncode or 1
                 print(
-                    f"[error] {env_id} failed with exit code {exc.returncode}",
+                    f"[error] iter {iteration} {env_id} ({model_name}) exit {exc.returncode}",
                     file=sys.stderr,
                 )
                 if not args.ignore_failures:
-                    for pending in future_map:
-                        pending.cancel()
-                    sys.exit(exit_code)
+                    for f in future_map:
+                        f.cancel()
+                    return exit_code
 
-    if exit_code and not args.ignore_failures:
-        sys.exit(exit_code)
+    return exit_code
+
+
+def main() -> None:
+    args = parse_args()
+    selected = args.category if args.category else GROUPS.keys()
+    iteration = 0
+
+    while True:
+        iteration += 1
+        jobs = build_jobs(args, selected, iteration)
+        if not jobs:
+            if args.loop:
+                print(f"[idle] iter {iteration} produced no jobs, sleeping {args.loop_sleep}s")
+                time.sleep(args.loop_sleep)
+                continue
+            break
+
+        exit_code = execute_jobs(args, jobs, iteration)
+        if exit_code and not args.ignore_failures:
+            sys.exit(exit_code)
+
+        if not args.loop:
+            break
+
+        print(f"[loop] iteration {iteration} complete, sleeping {args.loop_sleep}s")
+        time.sleep(args.loop_sleep)
 
 
 if __name__ == "__main__":
-    cli_args = parse_args()
     try:
-        main(cli_args)
+        main()
     except KeyboardInterrupt:
         print("\n[abort] Interrupted by user", file=sys.stderr)
