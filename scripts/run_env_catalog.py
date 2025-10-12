@@ -3,13 +3,17 @@
 Catalog runner to train MiniGrid and BabyAI environments in bulk.
 
 This variant guarantees every run trains for at least 2 million frames and, by
-default, loops forever generating fresh model names each pass so long-running
-machines stay busy. Use ``--one-pass`` if you want the legacy single sweep.
+default, loops forever. Model directories are stable across sweeps so training
+resumes from prior checkpoints and simply extends the total frame target. Use
+``--one-pass`` if you want the legacy single sweep. Across consecutive sweeps
+the frame budget doubles whenever the previous sweep failed to reach an average
+reward of 0.8, providing a simple automatic curriculum.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import shlex
 import subprocess
@@ -357,7 +361,7 @@ GROUPS: dict[str, GroupConfig] = {
 
 def sanitize_model_name(env_id: str, prefix: str, iteration: int, job_idx: int) -> str:
     safe_env = env_id.replace("-", "_").lower()
-    return f"{prefix}{safe_env}_iter{iteration:05d}_job{job_idx:03d}"
+    return f"{prefix}{safe_env}"
 
 
 def command_for(
@@ -514,10 +518,49 @@ def has_status(model_name: str) -> bool:
     return (storage_dir() / model_name / "status.pt").exists()
 
 
+def load_avg_reward(model_name: str) -> float | None:
+    csv_path = storage_dir() / model_name / "log.csv"
+    if not csv_path.exists():
+        return None
+    last_valid = None
+    try:
+        with csv_path.open(newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                value = row.get("return_mean")
+                if not value:
+                    continue
+                try:
+                    last_valid = float(value)
+                except ValueError:
+                    continue
+    except OSError:
+        return None
+    return last_valid
+
+
+def load_num_frames(model_name: str) -> int | None:
+    status_path = storage_dir() / model_name / "status.pt"
+    if not status_path.exists():
+        return None
+    try:
+        import torch  # type: ignore
+
+        status = torch.load(status_path, map_location="cpu")
+    except Exception:
+        return None
+    num_frames = status.get("num_frames")
+    try:
+        return int(num_frames)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_jobs(
     args: argparse.Namespace,
     selected: Iterable[str],
     iteration: int,
+    frame_multiplier: int,
 ) -> list[tuple[str, str, list[str]]]:
     jobs: list[tuple[str, str, list[str]]] = []
     base_seed = args.seed + (iteration - 1) * 1000
@@ -528,27 +571,59 @@ def build_jobs(
             print(f"[skip] iter {iteration} {env_id} ({model_name}) - existing status")
             continue
 
-        frames = max(args.frames or group.frames, MIN_FRAMES)
+        base_frames = max(args.frames or group.frames, MIN_FRAMES)
+        frames = base_frames * frame_multiplier
+        existing = has_status(model_name)
+        previous_frames = load_num_frames(model_name) if existing else None
+        if previous_frames is not None and frames < previous_frames:
+            frames = previous_frames
+
         seed = base_seed + job_idx
         cmd = command_for(env_id, group, args, model_name, seed, frames)
-        print(f"[run]  iter {iteration} {env_id}\n       {shlex.join(cmd)}")
+        details: list[str] = []
+        if existing:
+            if previous_frames is not None:
+                if frames > previous_frames:
+                    details.append(f"resume {previous_frames:,}->{frames:,} frames")
+                else:
+                    details.append(f"resume @ {previous_frames:,} frames")
+            else:
+                details.append("resume")
+        if frame_multiplier > 1 and frames >= base_frames:
+            details.append(f"frames x{frame_multiplier}")
+        if frames == previous_frames and frame_multiplier > 1 and previous_frames is not None:
+            details.append("target capped by existing progress")
+        detail_suffix = f" ({', '.join(details)})" if details else ""
+
+        print(f"[run]  iter {iteration} {env_id}{detail_suffix}\n       {shlex.join(cmd)}")
         jobs.append((env_id, model_name, cmd))
 
     return jobs
 
 
-def run_job(env_id: str, model_name: str, cmd: list[str], iteration: int) -> None:
+def run_job(env_id: str, model_name: str, cmd: list[str], iteration: int) -> float | None:
     print(f"[start] iter {iteration} {env_id} -> {model_name}")
     subprocess.run(cmd, check=True)
     print(f"[done]  iter {iteration} {env_id}")
+    avg_reward = load_avg_reward(model_name)
+    if avg_reward is not None:
+        print(f"[stat]  iter {iteration} {env_id} return_mean={avg_reward:.3f}")
+    else:
+        print(f"[stat]  iter {iteration} {env_id} return_mean unavailable")
+    return avg_reward
 
 
-def execute_jobs(args: argparse.Namespace, jobs: list[tuple[str, str, list[str]]], iteration: int) -> int:
+def execute_jobs(
+    args: argparse.Namespace,
+    jobs: list[tuple[str, str, list[str]]],
+    iteration: int,
+) -> tuple[int, list[float]]:
     if args.dry_run or not jobs:
-        return 0
+        return 0, []
 
     max_workers = max(1, args.max_parallel)
     exit_code = 0
+    rewards: list[float] = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {
@@ -558,29 +633,36 @@ def execute_jobs(args: argparse.Namespace, jobs: list[tuple[str, str, list[str]]
         for future in as_completed(future_map):
             env_id, model_name = future_map[future]
             try:
-                future.result()
+                result = future.result()
+                if result is not None:
+                    rewards.append(result)
             except subprocess.CalledProcessError as exc:
-                exit_code = exc.returncode or 1
+                exit_code = exit_code or (exc.returncode or 1)
                 print(
                     f"[error] iter {iteration} {env_id} ({model_name}) exit {exc.returncode}",
                     file=sys.stderr,
                 )
-                if not args.ignore_failures:
-                    for f in future_map:
-                        f.cancel()
-                    return exit_code
+                continue
+            except Exception as exc:
+                exit_code = exit_code or 1
+                print(
+                    f"[error] iter {iteration} {env_id} ({model_name}) unexpected failure: {exc}",
+                    file=sys.stderr,
+                )
+                continue
 
-    return exit_code
+    return exit_code, rewards
 
 
 def main() -> None:
     args = parse_args()
     selected = args.category if args.category else GROUPS.keys()
     iteration = 0
+    frame_multiplier = 1
 
     while True:
         iteration += 1
-        jobs = build_jobs(args, selected, iteration)
+        jobs = build_jobs(args, selected, iteration, frame_multiplier)
         if not jobs:
             if args.loop:
                 print(f"[idle] iter {iteration} produced no jobs, sleeping {args.loop_sleep}s")
@@ -588,9 +670,18 @@ def main() -> None:
                 continue
             break
 
-        exit_code = execute_jobs(args, jobs, iteration)
+        exit_code, rewards = execute_jobs(args, jobs, iteration)
         if exit_code and not args.ignore_failures:
             sys.exit(exit_code)
+
+        if rewards:
+            avg_reward = sum(rewards) / len(rewards)
+            print(f"[iter] iter {iteration} average return_mean={avg_reward:.3f} over {len(rewards)} run(s)")
+            if avg_reward < 0.8:
+                frame_multiplier *= 2
+                print(f"[iter] escalating frame budget: multiplier now x{frame_multiplier}")
+        else:
+            print(f"[iter] iter {iteration} produced no reward statistics; keeping multiplier x{frame_multiplier}")
 
         if not args.loop:
             break
