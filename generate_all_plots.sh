@@ -18,6 +18,7 @@ skipped=0
 for model_dir in "$STORAGE_DIR"/*; do
     if [ -d "$model_dir" ]; then
         model_name=$(basename "$model_dir")
+        echo "Model name is: $model_name"
 
         # Skip hidden directories and system files
         if [[ "$model_name" == .* ]] || [[ "$model_name" == ".DS_Store" ]]; then
@@ -25,7 +26,7 @@ for model_dir in "$STORAGE_DIR"/*; do
         fi
 
         total_models=$((total_models + 1))
-        echo "[$total_models] Processing: $model_name"
+        echo "[$total_models] Processing: $model_dir/log.csv"
 
         # Generate training curves if log.csv exists
         if [ -f "$model_dir/log.csv" ]; then
