@@ -31,11 +31,13 @@ for model_dir in "$STORAGE_DIR"/*; do
         # Generate training curves if log.csv exists
         if [ -f "$model_dir/log.csv" ]; then
             echo "    → Generating training_curves.pdf..."
-            if python3 plot_training.py --path "$model_dir" 2>&1 | grep -q "Saved"; then
+            output=$(python3 plot_training.py --path "$model_dir" 2>&1)
+            if echo "$output" | grep -q "Saved"; then
                 echo "    ✓ Training curves saved"
                 training_plots=$((training_plots + 1))
             else
                 echo "    ✗ Failed to generate training curves"
+                echo "    Error: $output" | head -3
             fi
         else
             echo "    ⊗ Skipping training plot (no log.csv found)"
@@ -45,11 +47,13 @@ for model_dir in "$STORAGE_DIR"/*; do
         # Generate evaluation plot if eval_logs/logs.csv exists
         if [ -f "$model_dir/eval_logs/logs.csv" ]; then
             echo "    → Generating eval_return.pdf..."
-            if python3 plot_evaluation.py --path "$model_dir" 2>&1 | grep -q "Saved"; then
+            output=$(python3 plot_evaluation.py --path "$model_dir" 2>&1)
+            if echo "$output" | grep -q "Saved"; then
                 echo "    ✓ Evaluation plot saved"
                 eval_plots=$((eval_plots + 1))
             else
                 echo "    ✗ Failed to generate evaluation plot"
+                echo "    Error: $output" | head -3
             fi
         else
             echo "    ⊗ Skipping eval plot (no eval_logs/logs.csv found)"
