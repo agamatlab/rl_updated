@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 
-// Use the locally bundled worker instead of a CDN path to avoid 404s in production.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdf.worker.min.js',
-  import.meta.url,
-).toString();
+// Serve the worker from /public to ensure it loads in production.
+pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL ?? ''}/pdf.worker.min.mjs`;
 
 interface PDFViewerProps {
   file: string;
