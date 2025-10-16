@@ -18,7 +18,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-  "prestart": "node src/listFiles.js",
+    "prestart": "node src/listFiles.js",
+    "prebuild": "node src/listFiles.js",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",

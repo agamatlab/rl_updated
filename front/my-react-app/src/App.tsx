@@ -3,8 +3,13 @@ import './App.css';
 import PDFViewer from './components/PDFViewer';
 import files from './file-list.json';
 
+const STORAGE_BASE =
+  (process.env.REACT_APP_STORAGE_BASE_URL ?? '/storage').replace(/\/+$/, '');
+
 function App() {
   const [file, setFile] = useState<string>(files[3]);
+
+  const pdfPath = `${STORAGE_BASE}/${file}/training_curves.pdf`;
 
   return (
     <div className="App">
@@ -21,7 +26,7 @@ function App() {
           </ul>
         </div>
         <div className="pdf-viewer-container">
-          <PDFViewer file={"/home/matlabakbarzade/rl_updated/storage/"+file+"/training_curves.pdf"} />
+          <PDFViewer file={pdfPath} />
         </div>
       </main>
     </div>
