@@ -56,3 +56,29 @@ body {
   padding: 20px;
   overflow-y: auto;
 }
+
+.pdf-iframe-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pdf-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  min-height: 600px;
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-download-hint {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.pdf-download-hint a {
+  color: #007acc;
+  text-decoration: underline;
+}

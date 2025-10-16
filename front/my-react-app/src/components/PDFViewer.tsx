@@ -1,32 +1,23 @@
-import React, { useState } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
-
-// Serve the worker from /public to ensure it loads in production.
-pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL ?? ''}/pdf.worker.min.mjs`;
-
 interface PDFViewerProps {
   file: string;
 }
 
-function PDFViewer({ file }: PDFViewerProps) {
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState<number>(1);
-
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-    setNumPages(numPages);
-    setPageNumber(1);
-  }
-
+export default function PDFViewer({ file }: PDFViewerProps) {
   return (
-    <div>
-      <Document file={file} onLoadSuccess={onDocumentLoadSuccess}>
-        <Page pageNumber={pageNumber} />
-      </Document>
-      <p>
-        Page {pageNumber} of {numPages}
+    <div className="pdf-iframe-wrapper">
+      <iframe
+        src={file}
+        title="PDF preview"
+        className="pdf-frame"
+        loading="lazy"
+      />
+      <p className="pdf-download-hint">
+        Having trouble loading?{' '}
+        <a href={file} target="_blank" rel="noopener noreferrer">
+          Open the PDF in a new tab
+        </a>
+        .
       </p>
     </div>
   );
 }
-
-export default PDFViewer;
