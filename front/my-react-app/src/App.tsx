@@ -21,7 +21,7 @@ function App() {
           </ul>
         </div>
         <div className="pdf-viewer-container">
-          <PDFViewer file={"/Users/aghamatlabakbarzade/Documents/Courses/ECE4903/storage/"+file+"/training_curves.pdf"} />
+          <PDFViewer file={"/home/matlabakbarzade/rl_updated/storage/"+file+"/training_curves.pdf"} />
         </div>
       </main>
     </div>

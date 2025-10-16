@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
+// Use the locally bundled worker instead of a CDN path to avoid 404s in production.
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdf.worker.min.js',
+  import.meta.url,
+).toString();
 
 interface PDFViewerProps {
   file: string;
