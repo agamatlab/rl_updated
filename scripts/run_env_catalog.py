@@ -64,6 +64,7 @@ MINIGRID_BASIC = GroupConfig(
         "MiniGrid-DistShift1-v0",
         "MiniGrid-DistShift2-v0",
     ),
+    text=True,
     frames=MIN_FRAMES,
     procs=16,
 )
@@ -87,6 +88,7 @@ MINIGRID_DOOR = GroupConfig(
         "MiniGrid-BlockedUnlockPickup-v0",
         "MiniGrid-UnlockPickup-v0",
     ),
+    text=True,
     frames=MIN_FRAMES,
     procs=16,
     recurrence=8,
@@ -112,6 +114,7 @@ MINIGRID_HAZARDS = GroupConfig(
         "MiniGrid-Dynamic-Obstacles-8x8-v0",
         "MiniGrid-Dynamic-Obstacles-16x16-v0",
     ),
+    text=True,
     frames=MIN_FRAMES,
     procs=24,
     recurrence=16,
@@ -133,6 +136,7 @@ MINIGRID_OBSTRUCTED = GroupConfig(
         "MiniGrid-ObstructedMaze-2Q-v1",
         "MiniGrid-ObstructedMaze-Full-v1",
     ),
+    text=True,
     frames=MIN_FRAMES,
     procs=24,
     recurrence=32,
@@ -163,6 +167,7 @@ MINIGRID_WFC = GroupConfig(
         "MiniGrid-WFC-ObstaclesHogs2-v0",
         "MiniGrid-WFC-Skew2-v0",
     ),
+    text=True,
     frames=MIN_FRAMES,
     procs=16,
     recurrence=16,
@@ -452,7 +457,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-prefix",
-        default="catalog_",
+        default="catalognew_",
         help="Prefix for generated model directory names.",
     )
     parser.add_argument(
