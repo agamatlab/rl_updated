@@ -1,0 +1,185 @@
+================================================================================
+ENVIRONMENT CLASSIFICATION SUMMARY
+================================================================================
+
+Total Environments: 30
+  - Converged (early): 23
+  - Converged (late): 3
+  - Not converged: 4
+
+Reshaped Return Classification:
+  - High: 12
+  - Low: 18
+
+Evaluation Return Classification (converged environments):
+  - Evaluated: 14 / 26
+  - High: 3
+  - Low: 11
+
+================================================================================
+DETAILED BREAKDOWN
+================================================================================
+
+DoorKey:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:high
+  Frames: 100,352
+  Final reshaped return: 0.1226
+  Eval mean return: 0.9324 ± 0.0234
+
+GTD:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 305,664
+  Final reshaped return: 0.9185
+
+GTDNEW:
+  Tags: convergence:yes(early),reshaped_return:high,eval_return:high
+  Frames: 1,000,448
+  Final reshaped return: 0.9534
+  Eval mean return: 0.9531 ± 0.1345
+
+GoToObj:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 745,472
+  Final reshaped return: 0.8909
+
+GoToObjNEW:
+  Tags: convergence:yes(early),reshaped_return:high,eval_return:low
+  Frames: 1,200,128
+  Final reshaped return: 0.8893
+  Eval mean return: 0.8912 ± 0.0727
+
+OpenRedBlueDoorsDebug:
+  Tags: convergence:no,reshaped_return:low
+  Frames: 18,432
+  Final reshaped return: 0.0000
+
+PU:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 3,734,528
+  Final reshaped return: 0.1848
+  Eval mean return: 0.1417 ± 0.3198
+
+PU_highbatch_opt:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 33,890,304
+  Final reshaped return: 0.3551
+  Eval mean return: 0.4691 ± 0.4161
+
+PU_highbatch_opt_v2:
+  Tags: convergence:yes(early),reshaped_return:low
+  Frames: 4,300,800
+  Final reshaped return: 0.1711
+
+PU_stable:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 2,500,608
+  Final reshaped return: 0.1967
+  Eval mean return: 0.1273 ± 0.3131
+
+PU_stablenew:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 3,004,416
+  Final reshaped return: 0.2661
+  Eval mean return: 0.1169 ± 0.2939
+
+RBD:
+  Tags: convergence:yes(late),reshaped_return:low
+  Frames: 120,832
+  Final reshaped return: 0.0720
+
+RBD_6x6:
+  Tags: convergence:yes(early),reshaped_return:high,eval_return:high
+  Frames: 492,544
+  Final reshaped return: 0.9707
+  Eval mean return: 0.9642 ± 0.1151
+
+SynthLoc:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 2,500,608
+  Final reshaped return: 0.4902
+  Eval mean return: 0.0753 ± 0.2628
+
+SynthLocNew:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 16,232,448
+  Final reshaped return: 0.1789
+  Eval mean return: 0.1536 ± 0.3576
+
+SynthLoc_final_opt_v2:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 1,130,496
+  Final reshaped return: 0.1197
+  Eval mean return: 0.0159 ± 0.1247
+
+SynthLoc_long1024_v1:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 3,342,336
+  Final reshaped return: 0.1338
+  Eval mean return: 0.0238 ± 0.1520
+
+SynthLoc_solo:
+  Tags: convergence:no,reshaped_return:low
+  Frames: 2,048
+  Final reshaped return: 0.1914
+
+SynthLoc_stageA:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 1,867,776
+  Final reshaped return: 0.1703
+  Eval mean return: 0.0000 ± 0.0000
+
+SynthLoc_stageA_stable:
+  Tags: convergence:yes(early),reshaped_return:low,eval_return:low
+  Frames: 2,715,648
+  Final reshaped return: 0.1259
+  Eval mean return: 0.0274 ± 0.1621
+
+bench_1_1760115686:
+  Tags: convergence:yes(late),reshaped_return:low
+  Frames: 50,176
+  Final reshaped return: 0.4294
+
+bench_1_1760115805:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.7227
+
+bench_1_1760173083:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.7227
+
+bench_2_1760115993:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.6615
+
+bench_2_1760173269:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.6615
+
+bench_3_1760116182:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.7236
+
+bench_3_1760173455:
+  Tags: convergence:yes(early),reshaped_return:high
+  Frames: 250,368
+  Final reshaped return: 0.7236
+
+catalog_minigrid_empty_5x5_v0:
+  Tags: convergence:yes(late),reshaped_return:high
+  Frames: 24,576
+  Final reshaped return: 0.7301
+
+catalog_minigrid_lavacrossings9n1_v0:
+  Tags: convergence:no,reshaped_return:low
+  Frames: 7,680
+  Final reshaped return: 0.0073
+
+catalog_minigrid_lavacrossings9n2_v0:
+  Tags: convergence:no,reshaped_return:low
+  Frames: 18,432
+  Final reshaped return: 0.0000
