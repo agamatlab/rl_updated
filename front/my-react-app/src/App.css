@@ -21,6 +21,17 @@ body {
   text-align: center;
 }
 
+.App-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 1.8rem;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
 .App-main {
   display: flex;
   flex: 1;
@@ -28,13 +39,90 @@ body {
 }
 
 .file-list-container {
-  width: 300px;
+  width: 350px;
   padding: 20px;
   background-color: #fff;
   border-right: 1px solid #ddd;
   overflow-y: auto;
 }
 
+.file-list-container h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.3rem;
+}
+
+/* Search Bar */
+.search-container {
+  margin-bottom: 15px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #007acc;
+}
+
+/* Filters */
+.filters-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.filter-group select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background-color: white;
+  cursor: pointer;
+}
+
+.checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.checkbox-group input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* Environment List */
 .file-list {
   list-style: none;
   padding: 0;
@@ -45,22 +133,126 @@ body {
   padding: 10px;
   cursor: pointer;
   border-bottom: 1px solid #eee;
+  border-radius: 4px;
+  margin-bottom: 5px;
+  transition: background-color 0.2s;
 }
 
 .file-list li:hover {
   background-color: #f0f0f0;
 }
 
+.file-list li.active {
+  background-color: #e3f2fd;
+  border-left: 3px solid #007acc;
+}
+
+.env-name {
+  font-weight: 500;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
+.env-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Convergence Tags */
+.tag-convergence {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.tag-convergence.tag-yes-early- {
+  background-color: #c8e6c9;
+  color: #1b5e20;
+}
+
+.tag-convergence.tag-yes-late- {
+  background-color: #fff9c4;
+  color: #f57f17;
+}
+
+.tag-convergence.tag-no {
+  background-color: #ffcdd2;
+  color: #c62828;
+}
+
+/* Reshaped Return Tags */
+.tag-reshaped.tag-high {
+  background-color: #e1f5fe;
+  color: #01579b;
+}
+
+.tag-reshaped.tag-low {
+  background-color: #fce4ec;
+  color: #880e4f;
+}
+
+/* Eval Return Tags */
+.tag-eval.tag-high {
+  background-color: #f3e5f5;
+  color: #4a148c;
+}
+
+.tag-eval.tag-low {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+/* PDF Viewer Container */
 .pdf-viewer-container {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Current Environment Info */
+.current-env-info {
+  background-color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.current-env-info h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.4rem;
+  color: #282c34;
+}
+
+.current-env-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.current-env-tags .tag {
+  font-size: 0.85rem;
+  padding: 5px 12px;
 }
 
 .pdf-iframe-wrapper {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
 }
 
 .pdf-frame {
@@ -70,12 +262,14 @@ body {
   min-height: 600px;
   background-color: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
 }
 
 .pdf-download-hint {
   margin-top: 12px;
   font-size: 0.9rem;
   color: #555;
+  text-align: center;
 }
 
 .pdf-download-hint a {
@@ -92,5 +286,6 @@ body {
   color: #666;
   background-color: #fff;
   border: 1px dashed #ccc;
-  border-radius: 6px;
+  border-radius: 8px;
+  min-height: 600px;
 }
