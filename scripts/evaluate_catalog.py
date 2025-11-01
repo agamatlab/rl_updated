@@ -73,6 +73,76 @@ def storage_dir() -> Path:
     return Path(os.environ.get("RL_STORAGE") or os.environ.get("PROJECT_STORAGE") or "storage")
 
 
+def check_convergence_robust(return_means: List[float], min_updates: int = 50, window_size: int = 25) -> bool:
+    """
+    Robust convergence detection using multiple criteria.
+
+    A model is considered converged if:
+    1. It has trained for at least min_updates
+    2. The recent window shows low variance AND
+    3. There is minimal improvement trend (slope near zero) AND
+    4. No significant improvement compared to earlier performance
+
+    Args:
+        return_means: List of return_mean values from training log
+        min_updates: Minimum number of updates before considering convergence
+        window_size: Size of the recent window to analyze
+
+    Returns:
+        True if the model has converged, False otherwise
+    """
+    if len(return_means) < min_updates:
+        # Not enough data to determine convergence
+        return False
+
+    # Use the last window_size updates
+    window = min(window_size, len(return_means))
+    recent = return_means[-window:]
+
+    # Criterion 1: Low variance in recent window
+    mean_recent = sum(recent) / len(recent)
+    variance = sum((x - mean_recent) ** 2 for x in recent) / len(recent)
+    std_dev = variance ** 0.5
+
+    # Threshold: std < 0.08 (was 0.05, but that's too strict and can miss oscillations)
+    low_variance = std_dev < 0.08
+
+    # Criterion 2: Flat or declining trend (minimal improvement)
+    # Calculate simple linear regression slope
+    n = len(recent)
+    x_vals = list(range(n))
+    x_mean = sum(x_vals) / n
+    y_mean = mean_recent
+
+    numerator = sum((x_vals[i] - x_mean) * (recent[i] - y_mean) for i in range(n))
+    denominator = sum((x_vals[i] - x_mean) ** 2 for i in range(n))
+
+    slope = numerator / denominator if denominator != 0 else 0
+
+    # Threshold: slope < 0.002 per update (very minimal improvement)
+    flat_trend = abs(slope) < 0.002
+
+    # Criterion 3: No significant improvement vs earlier performance
+    # Compare recent average to the average of updates from [window/2 : window] steps ago
+    if len(return_means) >= window * 2:
+        earlier_start = len(return_means) - window * 2
+        earlier_end = len(return_means) - window
+        earlier = return_means[earlier_start:earlier_end]
+        mean_earlier = sum(earlier) / len(earlier)
+
+        # Improvement should be less than 0.05 (5% absolute improvement)
+        improvement = mean_recent - mean_earlier
+        minimal_improvement = improvement < 0.05
+    else:
+        # Not enough history, just check if not improving rapidly
+        minimal_improvement = True
+
+    # All criteria must be satisfied for convergence
+    converged = low_variance and flat_trend and minimal_improvement
+
+    return converged
+
+
 def parse_log_csv(log_path: Path) -> RunMetrics:
     """Parse a log.csv file and extract metrics."""
     env_id = "unknown"
@@ -150,14 +220,8 @@ def parse_log_csv(log_path: Path) -> RunMetrics:
             if fps_list:
                 avg_fps = sum(fps_list) / len(fps_list)
 
-            # Check convergence: if last 5 updates have similar return_mean (std < 0.05)
-            converged = False
-            if len(return_means) >= 5:
-                recent = return_means[-5:]
-                mean_recent = sum(recent) / len(recent)
-                variance = sum((x - mean_recent) ** 2 for x in recent) / len(recent)
-                std_dev = variance ** 0.5
-                converged = std_dev < 0.05
+            # Check convergence with robust multi-criteria approach
+            converged = check_convergence_robust(return_means)
 
     except Exception as e:
         print(f"Warning: Error parsing {log_path}: {e}", file=sys.stderr)

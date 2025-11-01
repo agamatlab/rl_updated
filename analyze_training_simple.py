@@ -19,7 +19,9 @@ class TrainingAnalyzer:
 
     def __init__(self, storage_path: str = "./storage",
                  convergence_threshold: float = 0.05,
-                 convergence_window: int = 5,
+                 convergence_window: int = 10,
+                 convergence_stability_length: int = 15,
+                 min_convergence_value: float = 0.5,
                  early_convergence_ratio: float = 0.25,
                  high_reshaped_return_threshold: float = 0.7,
                  high_eval_return_threshold: float = 0.9):
@@ -30,6 +32,8 @@ class TrainingAnalyzer:
             storage_path: Path to storage directory containing environment logs
             convergence_threshold: Max std deviation to consider converged
             convergence_window: Number of updates to check for stability
+            convergence_stability_length: How long convergence must be maintained
+            min_convergence_value: Minimum mean value to be considered converged
             early_convergence_ratio: Ratio of total updates to classify as "early"
             high_reshaped_return_threshold: Threshold for high vs low reshaped return
             high_eval_return_threshold: Threshold for high vs low evaluation return
@@ -37,6 +41,8 @@ class TrainingAnalyzer:
         self.storage_path = Path(storage_path)
         self.convergence_threshold = convergence_threshold
         self.convergence_window = convergence_window
+        self.convergence_stability_length = convergence_stability_length
+        self.min_convergence_value = min_convergence_value
         self.early_convergence_ratio = early_convergence_ratio
         self.high_reshaped_return_threshold = high_reshaped_return_threshold
         self.high_eval_return_threshold = high_eval_return_threshold
@@ -80,6 +86,11 @@ class TrainingAnalyzer:
         """
         Analyze training data to determine convergence status.
 
+        More robust convergence detection:
+        1. Must maintain low variance for a sustained period
+        2. Final values must be consistent with convergence
+        3. Must reach a minimum performance threshold
+
         Args:
             data: List of training data dictionaries
 
@@ -88,29 +99,60 @@ class TrainingAnalyzer:
             convergence_status: "yes(early)", "yes(late)", or "no"
             convergence_update: Update number where convergence occurred (or None)
         """
-        if len(data) < self.convergence_window:
+        if len(data) < self.convergence_window + self.convergence_stability_length:
             return "no", None
 
-        # Look for convergence: stable rreturn_mean with low variance
-        for i in range(self.convergence_window, len(data)):
+        convergence_point = None
+
+        # Look for convergence: stable rreturn_mean with low variance that is sustained
+        for i in range(self.convergence_window, len(data) - self.convergence_stability_length):
             window_values = [data[j]['rreturn_mean']
                            for j in range(i - self.convergence_window, i)]
 
-            # Check if values are non-zero and stable
+            # Check if values are stable with high mean
             mean_val = statistics.mean(window_values)
-            if mean_val > 0.1:  # Ensure agent is learning something
+
+            # Only consider as potential convergence if mean is high enough
+            if mean_val >= self.min_convergence_value:
                 if len(window_values) > 1:
                     std = statistics.stdev(window_values)
                     if std < self.convergence_threshold:
-                        convergence_update = data[i]['update']
+                        # Check if this stability is maintained for the next stability_length updates
+                        future_window = [data[j]['rreturn_mean']
+                                       for j in range(i, min(i + self.convergence_stability_length, len(data)))]
 
-                        # Determine if early or late convergence
-                        if i < len(data) * self.early_convergence_ratio:
-                            return "yes(early)", convergence_update
-                        else:
-                            return "yes(late)", convergence_update
+                        if len(future_window) >= self.convergence_stability_length:
+                            future_mean = statistics.mean(future_window)
+                            future_std = statistics.stdev(future_window) if len(future_window) > 1 else 0
 
-        return "no", None
+                            # Check if future values are still stable and similar to current
+                            if (future_std < self.convergence_threshold * 1.5 and  # Allow slightly more variance
+                                abs(future_mean - mean_val) < 0.1 and  # Mean shouldn't drift much
+                                future_mean >= self.min_convergence_value * 0.9):  # Allow slight degradation
+
+                                convergence_point = i
+                                break
+
+        if convergence_point is None:
+            return "no", None
+
+        # Also verify that the final portion of training is stable
+        tail_size = min(20, len(data) // 5)  # Last 20 updates or 20% of training
+        tail_values = [data[j]['rreturn_mean'] for j in range(len(data) - tail_size, len(data))]
+        tail_mean = statistics.mean(tail_values)
+        tail_std = statistics.stdev(tail_values) if len(tail_values) > 1 else 0
+
+        # If the tail is unstable or performance dropped significantly, not converged
+        if tail_std > self.convergence_threshold * 2 or tail_mean < self.min_convergence_value * 0.8:
+            return "no", None
+
+        convergence_update = data[convergence_point]['update']
+
+        # Determine if early or late convergence
+        if convergence_point < len(data) * self.early_convergence_ratio:
+            return "yes(early)", convergence_update
+        else:
+            return "yes(late)", convergence_update
 
     def classify_reshaped_return(self, data: List[Dict]) -> str:
         """
